@@ -1,0 +1,619 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Vriksha — A Warli–Kalamkari Fusion</title>
+<style>
+  :root{
+    --mud:        #3B2011;
+    --mud-deep:   #240F07;
+    --cream:      #EFE4C9;
+    --cream-dim:  #C9BB99;
+    --red:        #A3323B;
+    --red-deep:   #7C2129;
+    --indigo:     #2E3B63;
+    --indigo-deep:#1E2846;
+    --ochre:      #C6893C;
+  }
+  *{box-sizing:border-box;}
+  html,body{
+    margin:0; padding:0; min-height:100%;
+    background:
+      radial-gradient(ellipse at 50% -10%, #3a2416 0%, var(--mud-deep) 60%);
+    color:var(--cream);
+    font-family: Georgia, 'Iowan Old Style', 'Palatino Linotype', 'Noto Serif', serif;
+  }
+  .stage{
+    max-width: 880px;
+    margin: 0 auto;
+    padding: 36px 20px 28px;
+    display:flex; flex-direction:column; align-items:center;
+  }
+  header{ text-align:center; margin-bottom: 18px; max-width: 640px; }
+  h1{
+    font-size: clamp(24px, 4vw, 34px);
+    margin: 0 0 8px;
+    font-weight: 700;
+    letter-spacing: 0.3px;
+    color: var(--cream);
+  }
+  h1 .sanskrit{ color: var(--ochre); font-style: italic; }
+  header p{
+    margin: 0;
+    font-size: 14.5px;
+    line-height: 1.55;
+    color: var(--cream-dim);
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  }
+  .frame{
+    position: relative;
+    padding: 14px;
+    background: linear-gradient(180deg, #4a2c17, #35190c);
+    border-radius: 4px;
+    box-shadow: 0 30px 60px -20px rgba(0,0,0,0.7), inset 0 0 0 1px rgba(0,0,0,0.4);
+  }
+  .frame::before{
+    content:"";
+    position:absolute; inset: 6px;
+    border: 1.5px solid var(--ochre);
+    pointer-events:none;
+  }
+  .frame::after{
+    content:"";
+    position:absolute; inset: 10px;
+    border: 1px solid rgba(239,228,201,0.35);
+    pointer-events:none;
+  }
+  canvas{
+    display:block;
+    background: var(--mud);
+    cursor: crosshair;
+    touch-action: manipulation;
+  }
+  .caption{
+    margin-top: 16px;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    font-size: 12.5px;
+    color: var(--cream-dim);
+    display:flex; flex-wrap:wrap; gap: 18px; justify-content:center;
+    max-width: 640px;
+    text-align:center;
+  }
+  .legend{ display:flex; align-items:center; gap:6px; }
+  .swatch{ width:9px; height:9px; border-radius:50%; display:inline-block; }
+  .hint{
+    margin-top: 10px;
+    font-size: 12px;
+    color: var(--ochre);
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    letter-spacing: 0.2px;
+  }
+</style>
+</head>
+<body>
+<div class="stage">
+  <header>
+    <h1><span class="sanskrit">Vriksha</span> — a Warli–Kalamkari fusion</h1>
+    <p>A Kalamkari tree of life grows and breathes in madder-red and indigo pen-work at the centre, crowned by a slowly turning sun mandala, while rice-white Warli dancers circle its roots and a flock of geometric birds drifts overhead — two regional painting languages animated as one living scene, framed by a pulsing triangle border.</p>
+  </header>
+
+  <div class="frame">
+    <canvas id="art"></canvas>
+  </div>
+
+  <div class="caption">
+    <span class="legend"><span class="swatch" style="background:var(--red)"></span>madder red — Kalamkari</span>
+    <span class="legend"><span class="swatch" style="background:var(--indigo)"></span>indigo — Kalamkari</span>
+    <span class="legend"><span class="swatch" style="background:var(--cream)"></span>rice paste white — Warli</span>
+    <span class="legend"><span class="swatch" style="background:var(--ochre)"></span>earth ochre — shared ground pigment</span>
+  </div>
+  <div class="hint">click or tap the scene to summon a dancer and scatter seed-light · watch the sky for passing bird flocks</div>
+</div>
+
+<script>
+(function(){
+  const canvas = document.getElementById('art');
+  const ctx = canvas.getContext('2d');
+  const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  let DPR = Math.min(window.devicePixelRatio || 1, 2);
+  let W, H, cx, baseY, scaleF;
+
+  // ---------- Tree (Kalamkari, recursive growth) ----------
+  const MAXDEPTH = 7;
+  let nodes = [];
+  let treeSeed = 1;
+
+  function rand(a,b){ return a + Math.random()*(b-a); }
+
+  function buildTree(){
+    nodes = [{ parent:-1, relAngle:-Math.PI/2, length:0, depth:0, order:0,
+               absAngle:-Math.PI/2, x2:cx, y2:baseY, birthDelay:0, growDur:1,
+               leafPop:0, isLeaf:false }];
+    let order = 1;
+    function branch(parentIdx, relAngle, length, depth){
+      const idx = nodes.length;
+      const node = {
+        parent: parentIdx, relAngle, length, depth, order: order++,
+        absAngle:0, x2:0, y2:0,
+        birthDelay: (depth-1)*480 + rand(0,120),
+        growDur: 420 + rand(0,120),
+        leafPop: 0, isLeaf: true, children:0
+      };
+      nodes.push(node);
+      nodes[parentIdx].isLeaf = false;
+      if(depth >= MAXDEPTH || length < 8) return;
+      const nBranches = depth < 2 ? 2 : (Math.random() < 0.78 ? 2 : 1);
+      for(let i=0;i<nBranches;i++){
+        const spread = 0.32 + Math.random()*0.28;
+        const dir = nBranches === 1 ? (Math.random()<0.5?-1:1) : (i===0 ? -1 : 1);
+        const newAngle = dir*spread + rand(-0.07,0.07);
+        const newLength = length * (0.66 + Math.random()*0.14);
+        branch(idx, newAngle, newLength, depth+1);
+      }
+    }
+    branch(0, 0, TRUNK_LEN(), 1);
+  }
+  function TRUNK_LEN(){ return Math.min(W,H) * 0.20; }
+
+  function totalGrowTime(){
+    let maxT = 0;
+    for(const n of nodes) maxT = Math.max(maxT, n.birthDelay + n.growDur);
+    return maxT;
+  }
+
+  function easeOutCubic(t){ return 1 - Math.pow(1-t, 3); }
+
+  function updateAndDrawTree(elapsed){
+    for(let i=1;i<nodes.length;i++){
+      const n = nodes[i];
+      const p = nodes[n.parent];
+      const sway = reduceMotion ? 0 :
+        Math.sin(elapsed*0.00055 + n.depth*0.8 + n.order*0.27) * (0.018 * n.depth);
+      n.absAngle = p.absAngle + n.relAngle + sway;
+      let t = (elapsed - n.birthDelay) / n.growDur;
+      t = Math.max(0, Math.min(1, t));
+      const et = easeOutCubic(t);
+      n.grown = t >= 1;
+      n.x2 = p.x2 + Math.cos(n.absAngle) * n.length * et;
+      n.y2 = p.y2 + Math.sin(n.absAngle) * n.length * et;
+
+      if(t > 0){
+        const w = Math.max(0.8, (MAXDEPTH - n.depth) * 1.15);
+        const parity = n.depth % 2 === 0;
+        ctx.beginPath();
+        ctx.moveTo(p.x2, p.y2);
+        ctx.lineTo(n.x2, n.y2);
+        ctx.strokeStyle = parity ? '#7C2129' : '#1E2846';
+        ctx.lineWidth = w + 1.4;
+        ctx.lineCap = 'round';
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(p.x2, p.y2);
+        ctx.lineTo(n.x2, n.y2);
+        ctx.strokeStyle = parity ? '#B84852' : '#3C4E82';
+        ctx.lineWidth = w;
+        ctx.stroke();
+      }
+
+      if(n.isLeaf && t >= 1){
+        n.leafPop = Math.min(1, n.leafPop + 0.045);
+        drawLeaf(n);
+      }
+    }
+  }
+
+  function drawLeaf(n){
+    const s = (3.2 + (MAXDEPTH-n.depth)*0.15) * easeOutCubic(n.leafPop);
+    if(s <= 0) return;
+    ctx.save();
+    ctx.translate(n.x2, n.y2);
+    ctx.rotate(n.absAngle + Math.PI/2);
+    const parity = n.depth % 2 === 0;
+    const col = parity ? '#A3323B' : '#2E3B63';
+    ctx.beginPath();
+    ctx.moveTo(0, -s*2.2);
+    ctx.bezierCurveTo(s*1.6, -s*1.2, s*1.4, s*1.4, 0, s*2.4);
+    ctx.bezierCurveTo(-s*1.4, s*1.4, -s*1.6, -s*1.2, 0, -s*2.2);
+    ctx.closePath();
+    ctx.fillStyle = '#EFE4C9';
+    ctx.fill();
+    ctx.lineWidth = Math.max(0.6, s*0.22);
+    ctx.strokeStyle = col;
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(0, -s*1.6);
+    ctx.lineTo(0, s*1.6);
+    for(let k=-1;k<=1;k+=2){
+      ctx.moveTo(0, -s*0.4);
+      ctx.lineTo(k*s*0.7, s*0.6);
+    }
+    ctx.strokeStyle = col;
+    ctx.lineWidth = Math.max(0.4, s*0.12);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  function leafNodes(){
+    return nodes.filter(n => n.isLeaf && n.grown);
+  }
+
+  // ---------- Kalamkari sun mandala (top motif) ----------
+  let sun = {};
+  function buildSun(){
+    sun = { x: cx, y: H*0.13, r: Math.min(W,H)*0.07 };
+  }
+  function drawSun(elapsed){
+    const pulse = 1 + Math.sin(elapsed*0.0016)*0.06;
+    const r = sun.r * pulse;
+    const rot = elapsed*0.00012;
+    ctx.save();
+    ctx.translate(sun.x, sun.y);
+    ctx.rotate(rot);
+    const spokes = 16;
+    for(let i=0;i<spokes;i++){
+      const a = (i/spokes)*Math.PI*2;
+      const len = r * (1.6 + (i%2===0?0.35:0));
+      ctx.beginPath();
+      ctx.moveTo(Math.cos(a)*r*0.9, Math.sin(a)*r*0.9);
+      ctx.lineTo(Math.cos(a)*len, Math.sin(a)*len);
+      ctx.strokeStyle = i%2===0 ? 'rgba(198,137,60,0.85)' : 'rgba(163,50,59,0.7)';
+      ctx.lineWidth = Math.max(1, r*0.045);
+      ctx.lineCap = 'round';
+      ctx.stroke();
+    }
+    ctx.rotate(-rot*2);
+    const petals = 10;
+    for(let i=0;i<petals;i++){
+      const a = (i/petals)*Math.PI*2;
+      ctx.beginPath();
+      ctx.ellipse(Math.cos(a)*r*0.55, Math.sin(a)*r*0.55, r*0.32, r*0.13, a, 0, Math.PI*2);
+      ctx.fillStyle = i%2===0 ? 'rgba(46,59,99,0.65)' : 'rgba(163,50,59,0.65)';
+      ctx.fill();
+    }
+    ctx.beginPath();
+    ctx.arc(0,0,r*0.5,0,Math.PI*2);
+    ctx.fillStyle = '#EFE4C9';
+    ctx.fill();
+    ctx.lineWidth = Math.max(1, r*0.06);
+    ctx.strokeStyle = '#C6893C';
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  // ---------- Warli bird flock (sky) ----------
+  let birds = [];
+  function spawnFlock(elapsed){
+    const dir = Math.random() < 0.5 ? 1 : -1;
+    const y0 = rand(H*0.08, H*0.32);
+    const count = 3 + Math.floor(Math.random()*4);
+    const startX = dir === 1 ? -40 : W+40;
+    for(let i=0;i<count;i++){
+      birds.push({
+        x: startX - dir*i*22, y: y0 + (i%2===0?-1:1)*i*4,
+        dir, speed: rand(0.028,0.045),
+        phase: rand(0,Math.PI*2), born: elapsed,
+        scale: rand(0.85,1.2)
+      });
+    }
+  }
+  function updateAndDrawBirds(dt, elapsed){
+    for(const b of birds){
+      b.x += b.dir * b.speed * dt;
+      const flap = Math.sin(elapsed*0.012 + b.phase);
+      const s = 5.5 * b.scale * scaleF;
+      ctx.save();
+      ctx.translate(b.x, b.y + Math.sin(elapsed*0.003+b.phase)*3);
+      if(b.dir < 0) ctx.scale(-1,1);
+      ctx.strokeStyle = 'rgba(239,228,201,0.9)';
+      ctx.lineWidth = Math.max(1, s*0.22);
+      ctx.lineCap = 'round';
+      ctx.beginPath();
+      ctx.moveTo(-s, -s*0.5*flap);
+      ctx.lineTo(0, 0);
+      ctx.lineTo(s, -s*0.5*flap);
+      ctx.stroke();
+      ctx.restore();
+    }
+    birds = birds.filter(b => b.x > -60 && b.x < W+60);
+  }
+
+  // ---------- Warli dancers (ground procession) ----------
+  const RINGS = [
+    { count: 11, rMul: 0.42, speed: 0.00016, tone: 0 },
+    { count: 15, rMul: 0.62, speed: -0.00011, tone: 1 }
+  ];
+  let dancers = [];
+  let extraDancers = [];
+
+  function buildDancers(){
+    dancers = [];
+    RINGS.forEach(ring => {
+      for(let i=0;i<ring.count;i++){
+        dancers.push({
+          baseAngle: (i/ring.count) * Math.PI*2 + rand(-0.05,0.05),
+          radius: Math.min(W,H) * ring.rMul * 0.5,
+          speed: ring.speed,
+          phase: rand(0, Math.PI*2),
+          scale: rand(0.85, 1.15)
+        });
+      }
+    });
+  }
+
+  function groundPoint(angle, radius){
+    return {
+      x: cx + Math.cos(angle) * radius,
+      y: baseY + Math.sin(angle) * radius * 0.34 + radius*0.06
+    };
+  }
+
+  function drawFigure(x, y, scale, phase, elapsed, alpha){
+    const s = 6.2 * scale * scaleF;
+    const swing = reduceMotion ? 0.5 : Math.sin(elapsed*0.005 + phase);
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.translate(x, y);
+    ctx.strokeStyle = '#EFE4C9';
+    ctx.fillStyle = '#EFE4C9';
+    ctx.lineWidth = Math.max(1, s*0.16);
+    ctx.lineCap = 'round';
+
+    // head
+    ctx.beginPath();
+    ctx.arc(0, -s*2.5, s*0.55, 0, Math.PI*2);
+    ctx.fill();
+
+    // torso: two triangles apex to apex
+    ctx.beginPath();
+    ctx.moveTo(0, -s*1.9);
+    ctx.lineTo(-s*0.9, -s*0.9);
+    ctx.lineTo(s*0.9, -s*0.9);
+    ctx.closePath();
+    ctx.fill();
+    ctx.beginPath();
+    ctx.moveTo(0, -s*0.1);
+    ctx.lineTo(-s*0.9, -s*0.9);
+    ctx.lineTo(s*0.9, -s*0.9);
+    ctx.closePath();
+    ctx.fill();
+
+    // arms
+    const armA = swing * 0.7;
+    ctx.beginPath();
+    ctx.moveTo(0, -s*1.5); ctx.lineTo(-s*1.6, -s*1.5 - armA*s*0.8);
+    ctx.moveTo(0, -s*1.5); ctx.lineTo(s*1.6, -s*1.5 + armA*s*0.8);
+    ctx.stroke();
+
+    // legs
+    const legA = swing * 0.8;
+    ctx.beginPath();
+    ctx.moveTo(0, -s*0.1); ctx.lineTo(-s*0.9 - legA*s*0.5, s*1.6);
+    ctx.moveTo(0, -s*0.1); ctx.lineTo(s*0.9 + legA*s*0.5, s*1.6 - legA*s*0.3);
+    ctx.stroke();
+
+    ctx.restore();
+  }
+
+  function drawDancers(elapsed){
+    for(const d of dancers){
+      const angle = d.baseAngle + (reduceMotion ? 0 : elapsed * d.speed);
+      const p = groundPoint(angle, d.radius);
+      drawFigure(p.x, p.y, d.scale, d.phase, elapsed, 0.95);
+    }
+    extraDancers = extraDancers.filter(d => elapsed - d.birth < d.life);
+    for(const d of extraDancers){
+      const age = elapsed - d.birth;
+      let a = 1;
+      if(age < 300) a = age/300;
+      else if(age > d.life-500) a = Math.max(0,(d.life-age)/500);
+      drawFigure(d.x, d.y, d.scale, d.phase, elapsed, a*0.95);
+    }
+  }
+
+  // ---------- Particle simulation (seed-light) ----------
+  let particles = [];
+  function spawnParticle(x,y, burst){
+    const ang = rand(0, Math.PI*2);
+    const sp = burst ? rand(0.02,0.09) : rand(0.006,0.03);
+    particles.push({
+      x, y,
+      vx: Math.cos(ang)*sp, vy: Math.sin(ang)*sp - (burst?0:0.01),
+      life: 0, maxLife: rand(1800, 3600),
+      r: rand(1.1, 2.4)
+    });
+    if(particles.length > 220) particles.shift();
+  }
+  function updateAndDrawParticles(dt, elapsed){
+    for(const p of particles){
+      p.life += dt;
+      p.x += p.vx*dt; p.y += p.vy*dt;
+      p.vy -= 0.000006*dt;
+      p.vx += Math.sin(elapsed*0.001 + p.x*0.02)*0.00002*dt;
+    }
+    particles = particles.filter(p => p.life < p.maxLife);
+    for(const p of particles){
+      const t = p.life/p.maxLife;
+      const a = t < 0.15 ? t/0.15 : 1 - (t-0.15)/0.85;
+      ctx.save();
+      ctx.globalAlpha = Math.max(0,a) * 0.85;
+      const g = ctx.createRadialGradient(p.x,p.y,0,p.x,p.y,p.r*3.2*scaleF);
+      g.addColorStop(0, '#F3D9A0');
+      g.addColorStop(1, 'rgba(198,137,60,0)');
+      ctx.fillStyle = g;
+      ctx.beginPath();
+      ctx.arc(p.x,p.y,p.r*3.2*scaleF,0,Math.PI*2);
+      ctx.fill();
+      ctx.fillStyle = '#F3D9A0';
+      ctx.beginPath();
+      ctx.arc(p.x,p.y,p.r*scaleF,0,Math.PI*2);
+      ctx.fill();
+      ctx.restore();
+    }
+  }
+
+  // ---------- Background texture (drawn once per resize) ----------
+  let bgCanvas;
+  function buildBackground(){
+    bgCanvas = document.createElement('canvas');
+    bgCanvas.width = W; bgCanvas.height = H;
+    const bctx = bgCanvas.getContext('2d');
+    const grad = bctx.createRadialGradient(cx, baseY*0.7, 20, cx, baseY*0.7, Math.max(W,H)*0.75);
+    grad.addColorStop(0, '#472612');
+    grad.addColorStop(1, '#2A150A');
+    bctx.fillStyle = grad;
+    bctx.fillRect(0,0,W,H);
+    bctx.globalAlpha = 0.5;
+    for(let i=0;i<900;i++){
+      bctx.fillStyle = Math.random() < 0.5 ? '#5a3419' : '#20100a';
+      const x = Math.random()*W, y = Math.random()*H;
+      bctx.fillRect(x, y, 1, 1);
+    }
+    bctx.globalAlpha = 1;
+    // ground ellipse under dancers
+    bctx.beginPath();
+    bctx.ellipse(cx, baseY + 6, Math.min(W,H)*0.36, Math.min(W,H)*0.14, 0, 0, Math.PI*2);
+    bctx.strokeStyle = 'rgba(239,228,201,0.18)';
+    bctx.lineWidth = 1.5;
+    bctx.stroke();
+    bctx.beginPath();
+    bctx.ellipse(cx, baseY + 6, Math.min(W,H)*0.62, Math.min(W,H)*0.20, 0, 0, Math.PI*2);
+    bctx.strokeStyle = 'rgba(239,228,201,0.10)';
+    bctx.stroke();
+  }
+
+  // ---------- Animated Warli triangle border ----------
+  function drawBorderAnim(elapsed){
+    const margin = Math.min(W,H)*0.035;
+    const step = Math.min(W,H)*0.028;
+    const t = (elapsed*0.00004) % 1;
+    ctx.save();
+    ctx.globalAlpha = 0.55;
+    const pathTop = W - margin*2;
+    const nTri = Math.floor(pathTop/step);
+    for(let i=0;i<nTri;i++){
+      const phase = (i/nTri + t) % 1;
+      const pulse = 0.5 + 0.5*Math.sin(phase*Math.PI*2);
+      const x = margin + i*step;
+      drawTri(x, margin, step*0.42, pulse, -1);
+      drawTri(x, H-margin, step*0.42, pulse, 1);
+    }
+    const pathSide = H - margin*2;
+    const nTriS = Math.floor(pathSide/step);
+    for(let i=0;i<nTriS;i++){
+      const phase = (i/nTriS + t) % 1;
+      const pulse = 0.5 + 0.5*Math.sin(phase*Math.PI*2 + 1.5);
+      const y = margin + i*step;
+      drawTriV(margin, y, step*0.42, pulse, -1);
+      drawTriV(W-margin, y, step*0.42, pulse, 1);
+    }
+    ctx.restore();
+  }
+  function drawTri(x,y,s,pulse,dir){
+    ctx.beginPath();
+    ctx.moveTo(x, y + dir*s*pulse*0.6 - dir*s*0.3);
+    ctx.lineTo(x - s*0.5, y - dir*s*0.3);
+    ctx.lineTo(x + s*0.5, y - dir*s*0.3);
+    ctx.closePath();
+    ctx.fillStyle = pulse > 0.6 ? '#C6893C' : '#EFE4C9';
+    ctx.fill();
+  }
+  function drawTriV(x,y,s,pulse,dir){
+    ctx.beginPath();
+    ctx.moveTo(x + dir*s*pulse*0.6 - dir*s*0.3, y);
+    ctx.lineTo(x - dir*s*0.3, y - s*0.5);
+    ctx.lineTo(x - dir*s*0.3, y + s*0.5);
+    ctx.closePath();
+    ctx.fillStyle = pulse > 0.6 ? '#C6893C' : '#EFE4C9';
+    ctx.fill();
+  }
+
+  // ---------- Setup / resize ----------
+  function resize(){
+    const container = canvas.parentElement;
+    const cssW = Math.min(container.clientWidth - 28, 820);
+    const cssH = cssW * 0.82;
+    canvas.style.width = cssW + 'px';
+    canvas.style.height = cssH + 'px';
+    canvas.width = Math.round(cssW * DPR);
+    canvas.height = Math.round(cssH * DPR);
+    ctx.setTransform(DPR,0,0,DPR,0,0);
+    W = cssW; H = cssH;
+    scaleF = Math.min(W,H) / 620;
+    cx = W/2;
+    baseY = H*0.86;
+    buildBackground();
+    buildTree();
+    buildDancers();
+    buildSun();
+    birds = [];
+    particles = [];
+    extraDancers = [];
+    startTime = performance.now() - (reduceMotion ? (totalGrowTime() + 500) : 0);
+    nextFlockAt = 1500;
+  }
+
+  // ---------- Interaction ----------
+  canvas.addEventListener('pointerdown', (e) => {
+    const rect = canvas.getBoundingClientRect();
+    const x = (e.clientX - rect.left);
+    const y = (e.clientY - rect.top);
+    extraDancers.push({
+      x, y, birth: performance.now() - startTime,
+      life: 3200, phase: rand(0,Math.PI*2), scale: rand(0.8,1.2)
+    });
+    if(extraDancers.length > 24) extraDancers.shift();
+    for(let i=0;i<10;i++) spawnParticle(x, y, true);
+    spawnFlock(performance.now() - startTime);
+  });
+
+  // ---------- Main loop ----------
+  let startTime = performance.now();
+  let lastTime = startTime;
+  let spawnAccum = 0;
+  let nextFlockAt = 1500;
+
+  function frame(now){
+    const elapsed = now - startTime;
+    const dt = Math.min(48, now - lastTime);
+    lastTime = now;
+
+    ctx.clearRect(0,0,W,H);
+    ctx.drawImage(bgCanvas, 0, 0, W, H);
+    drawBorderAnim(elapsed);
+    drawSun(elapsed);
+
+    updateAndDrawTree(elapsed);
+    drawDancers(elapsed);
+
+    if(!reduceMotion && elapsed > nextFlockAt){
+      spawnFlock(elapsed);
+      nextFlockAt = elapsed + rand(4000, 8000);
+    }
+    updateAndDrawBirds(dt, elapsed);
+
+    const grownFor = elapsed - totalGrowTime();
+    if(!reduceMotion && grownFor > 0){
+      spawnAccum += dt;
+      if(spawnAccum > 260){
+        spawnAccum = 0;
+        const leaves = leafNodes();
+        if(leaves.length){
+          const n = leaves[Math.floor(Math.random()*leaves.length)];
+          spawnParticle(n.x2, n.y2, false);
+        }
+      }
+    }
+    updateAndDrawParticles(dt, elapsed);
+
+    requestAnimationFrame(frame);
+  }
+
+  resize();
+  window.addEventListener('resize', () => { resize(); });
+  requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>
